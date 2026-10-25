@@ -18,10 +18,14 @@ import os
 import sys
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 URL = "https://www.icaionlineregistration.org/launchbatchdetail.aspx"
 STATE_FILE = Path("state.json")
+META_FILE = Path("meta.json")   # heartbeat date + "currently failing" flag
+IST = timezone(timedelta(hours=5, minutes=30))
+HEARTBEAT_HOUR_IST = 9          # daily "still alive" message goes out after 9:00 AM IST
 REGION = os.environ.get("ICAI_REGION", "Central")
 POU = os.environ.get("ICAI_POU", "Indore")
 DEFAULT_COURSES = [
@@ -35,15 +39,52 @@ DEBUG_DIR = Path(os.environ.get("DEBUG_DIR", "debug"))
 
 # ----------------------------------------------------------------- telegram
 def send_telegram(text: str) -> None:
+    """Send to every chat id in TELEGRAM_CHAT_ID (comma-separated: you, a group...)."""
     token = os.environ["TELEGRAM_BOT_TOKEN"]
-    chat_id = os.environ["TELEGRAM_CHAT_ID"]
+    chat_ids = [c.strip() for c in os.environ["TELEGRAM_CHAT_ID"].split(",") if c.strip()]
     # Telegram limit is 4096 chars per message
     chunks = [text[i:i + 3800] for i in range(0, len(text), 3800)] or [text]
-    for chunk in chunks:
-        data = urllib.parse.urlencode({"chat_id": chat_id, "text": chunk, "disable_web_page_preview": "true"}).encode()
-        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-        with urllib.request.urlopen(req, timeout=30) as r:
-            r.read()
+    delivered = 0
+    for chat_id in chat_ids:
+        try:
+            for chunk in chunks:
+                data = urllib.parse.urlencode({"chat_id": chat_id, "text": chunk, "disable_web_page_preview": "true"}).encode()
+                req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    r.read()
+            delivered += 1
+        except Exception as e:  # one bad chat must not block the others
+            print(f"Telegram send to {chat_id} failed: {e}", file=sys.stderr)
+    if chat_ids and delivered == 0:
+        raise RuntimeError("Telegram message could not be delivered to any chat")
+
+
+def load_meta() -> dict:
+    try:
+        return json.loads(META_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def save_meta(meta: dict) -> None:
+    META_FILE.write_text(json.dumps(meta, indent=2, sort_keys=True))
+
+
+def notify_failure() -> None:
+    """Called by the workflow when a run fails. Sends ONE alert per failing
+    streak (not one every 15 minutes)."""
+    meta = load_meta()
+    if meta.get("failing"):
+        print("Already reported this failure; not sending again")
+        return
+    run_url = os.environ.get("RUN_URL", "")
+    send_telegram(
+        "⚠️ ICAI monitor run FAILED. The site may be down or its layout changed.\n"
+        "I'll keep retrying every 15 min and tell you when it recovers.\n"
+        + (f"Details: {run_url}" if run_url else "")
+    )
+    meta["failing"] = True
+    save_meta(meta)
 
 
 # ------------------------------------------------------------------ diffing
@@ -199,8 +240,28 @@ def main():
 
     STATE_FILE.write_text(json.dumps(new, indent=2, ensure_ascii=False, sort_keys=True))
 
+    # ---- failure recovery + daily "still alive" message
+    meta = load_meta()
+    now = datetime.now(IST)
+    if meta.get("failing"):
+        send_telegram("✅ ICAI monitor has recovered and is working again.")
+        meta["failing"] = False
+    today = now.strftime("%Y-%m-%d")
+    if first_run:
+        meta["last_heartbeat"] = today   # the "started" message already counts for today
+    elif meta.get("last_heartbeat") != today and now.hour >= HEARTBEAT_HOUR_IST:
+        lines = [f"💚 ICAI monitor is alive ({now.strftime('%d %b, %I:%M %p')} IST). No action needed.",
+                 f"Watching {REGION} / {POU}:"]
+        lines += [f"  • {course}: {len(b)} batch(es)" for course, b in new.items()]
+        send_telegram("\n".join(lines))
+        meta["last_heartbeat"] = today
+    save_meta(meta)
+
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["notify-failure"]:
+        notify_failure()
+        sys.exit(0)
     try:
         main()
     except Exception as e:  # job fails -> GitHub emails you; state is untouched
