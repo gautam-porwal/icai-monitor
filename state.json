@@ -3,8 +3,17 @@
     "AICITSSAdvITT__INDORE_81 | 7-0-AM to 1-0-PM": {
       "detail": "Batch No: AICITSSAdvITT__INDORE_81 | Available Seats: 0 | From Date: 02/11/2026 | To Date: 20/11/2026 | Batch Time: 7-0-AM to 1-0-PM | Pou Name: INDORE | Course: AICITSS - Advanced Information Technology | Open For: General | Registration Start Date: ",
       "seats": "Available Seats: 0"
+    },
+    "AICITSSAdvITT__INDORE_82 | 7-0-AM to 1-0-PM": {
+      "detail": "Batch No: AICITSSAdvITT__INDORE_82 | Available Seats: 0 | From Date: 12/11/2026 | To Date: 30/11/2026 | Batch Time: 7-0-AM to 1-0-PM | Pou Name: INDORE | Course: AICITSS - Advanced Information Technology | Open For: General | Registration Start Date: ",
+      "seats": "Available Seats: 0"
     }
   },
-  "Advanced (ICITSS) MCS Course": {},
+  "Advanced (ICITSS) MCS Course": {
+    "AdvICITSSMCS__INDORE_75 | 10-30-AM to 5-30-PM": {
+      "detail": "Batch No: AdvICITSSMCS__INDORE_75 | Available Seats: 0 | From Date: 12/11/2026 | To Date: 30/11/2026 | Batch Time: 10-30-AM to 5-30-PM | Pou Name: INDORE | Course: Advanced (ICITSS) MCS Course | Open For: General",
+      "seats": "Available Seats: 0"
+    }
+  },
   "Advanced (ICITSS) MCS Course - Weekend": {}
 }
